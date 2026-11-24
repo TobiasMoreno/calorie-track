@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Plus, Trash2, X } from 'lucide-react'
 import { api } from '../lib/api'
 import type { UserSettings } from '../types'
+import { PortionSettingsPanel } from './PortionSettingsPanel'
 
 export function SettingsModal({ open, settings, onClose, onSaved }: { open: boolean; settings?: UserSettings; onClose: () => void; onSaved: () => void }) {
   const queryClient = useQueryClient()
@@ -88,6 +89,13 @@ export function SettingsModal({ open, settings, onClose, onSaved }: { open: bool
               {foodMutation.isError && <div className="inline-error"><AlertCircle size={15} /> {foodMutation.error.message}</div>}
               {foodMutation.isSuccess && <p className="saved-message">Referencia guardada. El historial no fue modificado.</p>}
               <button type="button" className="secondary-button catalog-save" disabled={!selectedFoodId || foodMutation.isPending || foodDetail.trim().length < 5} onClick={() => foodMutation.mutate()}>{foodMutation.isPending ? 'Guardando…' : 'Guardar referencia'}</button>
+            </div>
+          </div>
+          <div className="settings-divider" />
+          <div className="settings-row">
+            <div><h3>Porciones personales</h3><p>Guardá equivalencias para tus platos, vasos o unidades habituales. Los registros ya guardados mantienen siempre el gramaje que utilizaron.</p></div>
+            <div className="settings-well">
+              <PortionSettingsPanel key={selectedFoodId} foods={foods.data ?? []} selectedFoodId={selectedFoodId} onSelectFood={selectFood} />
             </div>
           </div>
           {mutation.isError && <div className="inline-error"><AlertCircle size={15} /> {mutation.error.message}</div>}

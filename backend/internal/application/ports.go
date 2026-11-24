@@ -17,7 +17,17 @@ type Repository interface {
 	GetFood(context.Context, int64) (domain.Food, error)
 	UpdateFood(context.Context, int64, domain.FoodReferenceUpdate) (domain.Food, error)
 	GetPortion(context.Context, int64) (domain.FoodPortion, error)
+	CreatePortion(context.Context, int64, domain.FoodPortionInput) (domain.FoodPortion, error)
+	UpdatePortion(context.Context, int64, domain.FoodPortionInput) (domain.FoodPortion, error)
+	SetDefaultPortion(context.Context, int64) (domain.FoodPortion, error)
+	DeletePortion(context.Context, int64) error
+	ListRecipes(context.Context, string) ([]domain.Recipe, error)
+	GetRecipe(context.Context, int64) (domain.Recipe, error)
+	CreateRecipe(context.Context, domain.RecipeInput, []domain.RecipeIngredient) (domain.Recipe, error)
+	UpdateRecipe(context.Context, int64, domain.RecipeInput, []domain.RecipeIngredient) (domain.Recipe, error)
+	DeleteRecipe(context.Context, int64) error
 	CreateMealEntry(context.Context, domain.CreateMealEntryInput, []domain.MealEntryItem) (domain.MealEntry, error)
+	UpdateMealEntry(context.Context, int64, []domain.MealEntryItem) (domain.MealEntry, error)
 	DeleteMealEntry(context.Context, int64) error
 	UpdateTaskStatus(context.Context, int64, domain.TaskStatus) error
 	CreateTask(context.Context, string, string) (domain.DailyMealTask, error)

@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Check, Circle, Plus, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
+import { BookOpen, Check, Circle, Pencil, Plus, RotateCcw, SkipForward, Trash2 } from 'lucide-react'
 import type { DailyMealTask, MealEntry, TaskStatus } from '../types'
 
 const kcal = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
 
-export function MealChecklist({ tasks, entries, onRegister, onStatus, onDelete, onAddTask, busy }: {
+export function MealChecklist({ tasks, entries, onRegister, onEdit, onStatus, onDelete, onAddTask, busy }: {
   tasks: DailyMealTask[]
   entries: MealEntry[]
   onRegister: (taskId: number) => void
+  onEdit: (entry: MealEntry) => void
   onStatus: (taskId: number, status: Exclude<TaskStatus, 'registered'>) => void
   onDelete: (entryId: number) => void
   onAddTask: (name: string) => Promise<unknown>
@@ -42,13 +43,14 @@ export function MealChecklist({ tasks, entries, onRegister, onStatus, onDelete, 
                 </div>
                 {entry && (
                   <div className="entry-details">
+                    {entry.recipeName && <p className="recipe-entry-label"><BookOpen size={12} /> {entry.recipeName}</p>}
                     {entry.items.map((item) => <p key={item.id}>{item.foodName} · {item.estimatedGrams} g <span>{Math.round(item.calories)} kcal</span></p>)}
                   </div>
                 )}
                 <div className="row-actions">
                   {task.status === 'pending' && <><button onClick={() => onRegister(task.id)} disabled={busy}>Registrar</button><button onClick={() => onStatus(task.id, 'skipped')} disabled={busy}>Omitir</button></>}
                   {task.status === 'skipped' && <><button onClick={() => onRegister(task.id)} disabled={busy}>Registrar</button><button onClick={() => onStatus(task.id, 'pending')} disabled={busy}><RotateCcw size={13} /> Volver a pendiente</button></>}
-                  {entry && <button className="danger-action" onClick={() => window.confirm(`¿Eliminar el registro de ${task.name}?`) && onDelete(entry.id)} disabled={busy}><Trash2 size={13} /> Eliminar</button>}
+                  {entry && <><button onClick={() => onEdit(entry)} disabled={busy}><Pencil size={13} /> Editar</button><button className="danger-action" onClick={() => window.confirm(`¿Eliminar el registro de ${task.name}?`) && onDelete(entry.id)} disabled={busy}><Trash2 size={13} /> Eliminar</button></>}
                 </div>
               </div>
             </article>

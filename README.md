@@ -2,7 +2,7 @@
 
 Aplicación web personal para registrar comidas, estimar porciones y calorías y comparar lo registrado con un objetivo diario configurable.
 
-La Fase 1 funciona completamente en local mediante Docker Compose y levanta tres servicios:
+La Fase 1 y el primer bloque de productividad de la Fase 2 funcionan en local mediante Docker Compose. La aplicación levanta tres servicios:
 
 - `db`: PostgreSQL 17 con volumen persistente.
 - `backend`: API REST en Go.
@@ -181,7 +181,7 @@ frontend/src/
 
 ## Modelo de datos
 
-Tablas principales de la Fase 1:
+Tablas principales implementadas:
 
 - `user_settings`: objetivo, zona horaria y comidas habituales.
 - `daily_days`: fecha local y snapshot del objetivo.
@@ -190,10 +190,12 @@ Tablas principales de la Fase 1:
 - `food_portions`: equivalencias entre unidades y gramos.
 - `meal_entries`: comida registrada y total histórico.
 - `meal_entry_items`: alimentos y snapshots nutricionales.
+- `recipes`: preparaciones frecuentes y cantidad de porciones.
+- `recipe_ingredients`: ingredientes, porciones y gramajes de cada receta.
 
-Las tablas `recipes`, `recipe_ingredients`, `weight_entries` y `food_photos` preparan las fases siguientes, pero sus funcionalidades todavía no están expuestas.
+Las tablas `weight_entries` y `food_photos` preparan las fases siguientes, pero sus funcionalidades todavía no están expuestas.
 
-## API de la Fase 1
+## API disponible
 
 | Método | Ruta | Uso |
 | --- | --- | --- |
@@ -201,9 +203,20 @@ Las tablas `recipes`, `recipe_ingredients`, `weight_entries` y `food_photos` pre
 | `GET` | `/api/settings` | Consultar configuración |
 | `PUT` | `/api/settings` | Actualizar objetivo y checklist habitual |
 | `GET` | `/api/dashboard?date=YYYY-MM-DD` | Consultar o inicializar un día |
+| `GET` | `/api/calendar?month=YYYY-MM` | Consultar el resumen mensual sin inicializar días vacíos |
 | `GET` | `/api/foods?q=` | Buscar alimentos y porciones |
 | `PATCH` | `/api/foods/{id}` | Corregir una referencia nutricional |
+| `POST` | `/api/foods/{id}/portions` | Crear una porción personal |
+| `PUT` | `/api/portions/{id}` | Editar una porción personal |
+| `PATCH` | `/api/portions/{id}/default` | Elegir la porción predeterminada de un alimento |
+| `DELETE` | `/api/portions/{id}` | Eliminar una porción personal conservando snapshots históricos |
+| `GET` | `/api/recipes?q=` | Buscar comidas frecuentes |
+| `POST` | `/api/recipes` | Crear una receta con ingredientes |
+| `PUT` | `/api/recipes/{id}` | Editar una receta |
+| `DELETE` | `/api/recipes/{id}` | Eliminar una receta sin alterar registros históricos |
+| `POST` | `/api/recipe-entries` | Registrar porciones de una receta en una comida |
 | `POST` | `/api/meal-entries` | Registrar una comida |
+| `PUT` | `/api/meal-entries/{id}` | Editar y recalcular un registro histórico |
 | `DELETE` | `/api/meal-entries/{id}` | Eliminar un registro |
 | `PATCH` | `/api/tasks/{id}` | Marcar pendiente u omitida |
 | `POST` | `/api/tasks` | Agregar una comida o snack |
@@ -245,5 +258,5 @@ npm run dev
 
 ## Alcance pendiente
 
-La Fase 1 está enfocada en el uso diario básico. El orden propuesto para las siguientes funcionalidades está en [ROADMAP.md](./ROADMAP.md). La próxima fase comienza con recetas y comidas frecuentes; fotografías, IA y estadísticas avanzadas permanecen fuera de esta entrega.
+La Fase 1 está cerrada. La Fase 2 incluye comidas frecuentes, porciones personales, calendario mensual, historial por día y edición de registros. El siguiente bloque recomendado es el seguimiento de peso de la Fase 3. El orden completo está en [ROADMAP.md](./ROADMAP.md). Fotografías e IA permanecen fuera de esta entrega.
 

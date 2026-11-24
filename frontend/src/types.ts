@@ -25,6 +25,15 @@ export interface FoodPortion {
   size: string
   grams: number
   isDefault: boolean
+  isCustom: boolean
+}
+
+export interface FoodPortionInput {
+  name: string
+  unit: 'unidad' | 'porción' | 'cucharada'
+  size?: string
+  grams: number
+  isDefault: boolean
 }
 
 export interface Food {
@@ -58,17 +67,63 @@ export interface MealEntry {
   date: string
   taskId: number
   mealName: string
+  recipeId?: number
+  recipeName?: string
+  recipeMultiplier?: number
   totalCalories: number
   items: MealEntryItem[]
   createdAt: string
+}
+
+export interface RecipeIngredient {
+  id: number
+  recipeId: number
+  foodId: number
+  foodName: string
+  quantity: number
+  unit: string
+  portionId?: number
+  portionName?: string
+  estimatedGrams: number
+  caloriesPer100g: number
+  calories: number
+  cookingMethod?: string
+  notes?: string
+}
+
+export interface Recipe {
+  id: number
+  name: string
+  servings: number
+  notes?: string
+  ingredients: RecipeIngredient[]
+  totalCalories: number
+  caloriesPerServing: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RecipeInput {
+  name: string
+  servings: number
+  notes?: string
+  items: CreateItemInput[]
 }
 
 export interface DaySummary {
   date: string
   calories: number
   target: number | null
+  taskCount: number
+  registeredTasks: number
+  skippedTasks: number
   pendingTasks: number
   hasData: boolean
+}
+
+export interface CalendarMonth {
+  month: string
+  days: DaySummary[]
 }
 
 export interface Dashboard {
@@ -88,6 +143,10 @@ export interface CreateItemInput {
   portionId?: number
   cookingMethod?: string
   notes?: string
+}
+
+export interface UpdateMealEntryInput {
+  items: CreateItemInput[]
 }
 
 export interface ApiError { error: { code: string; message: string } }

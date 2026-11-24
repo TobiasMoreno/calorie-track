@@ -78,14 +78,17 @@ El siguiente desarrollo funcional puede comenzar en la Fase 2.
 
 Es la mejora con mayor impacto sobre el objetivo de registrar una comida en menos de 15 segundos.
 
+Estado: núcleo implementado. Falta verificar manualmente el flujo y agregar el aviso de referencias nutricionales modificadas.
+
 Alcance recomendado:
 
-- Crear una receta con nombre, ingredientes y cantidades.
-- Calcular sus calorías desde las referencias de cada ingrediente.
-- Definir cantidad de porciones producidas.
-- Guardar snapshots nutricionales al registrar una receta.
-- Registrar una receta desde el dashboard con uno o dos clics.
-- Permitir cambiar el multiplicador antes de confirmar.
+- [x] Crear una receta con nombre, ingredientes y cantidades.
+- [x] Calcular sus calorías desde las referencias de cada ingrediente.
+- [x] Definir cantidad de porciones producidas.
+- [x] Guardar snapshots nutricionales al registrar una receta.
+- [x] Registrar una receta desde el dashboard con pocos clics.
+- [x] Permitir cambiar las porciones consumidas antes de confirmar.
+- [x] Editar y eliminar recetas sin modificar registros históricos.
 - Mostrar claramente cuándo una receta usa una referencia modificada desde su última utilización.
 
 Criterios de aceptación:
@@ -98,20 +101,27 @@ Criterios de aceptación:
 
 ### Segunda funcionalidad de Fase 2 — Porciones personalizadas
 
-- Crear, editar y eliminar porciones asociadas a un alimento.
-- Guardar nombres como “mi milanesa mediana” o “mi plato normal”.
-- Registrar el gramaje corregido por el usuario.
-- Ofrecer la porción personal como predeterminada en registros posteriores.
-- Mantener las porciones históricas como snapshots.
+Estado: implementada, pendiente de verificación manual.
+
+- [x] Crear, editar y eliminar porciones asociadas a un alimento.
+- [x] Guardar nombres como “mi milanesa mediana” o “mi plato normal”.
+- [x] Registrar el gramaje corregido por el usuario.
+- [x] Ofrecer la porción personal como predeterminada en registros posteriores.
+- [x] Mantener las porciones históricas como snapshots.
+- [x] Crear una porción sin abandonar el registro manual o la edición de una receta.
 
 ### Tercera funcionalidad de Fase 2 — Historial y edición
 
-- Calendario mensual con estados por día.
-- Pantalla de detalle histórico.
-- Edición de una comida registrada.
-- Edición de cantidades, porciones, cocción y notas.
-- Recalcular únicamente el registro editado.
-- Mantener intactos los demás días.
+Estado: implementada, pendiente de verificación manual.
+
+- [x] Calendario mensual con estados por día.
+- [x] Diferenciar días completos, incompletos y todavía no consultados.
+- [x] Pantalla de detalle histórico.
+- [x] Edición de una comida registrada.
+- [x] Edición de alimentos, cantidades, porciones, cocción y notas.
+- [x] Recalcular únicamente el registro editado.
+- [x] Editar un registro originado en una receta sin modificar la receta.
+- [x] Mantener intactos los demás días.
 
 ## Fase 3 — Seguimiento y análisis
 
@@ -158,6 +168,6 @@ Pendiente:
 
 ## Próxima tarea concreta
 
-> Implementar comidas frecuentes y recetas con snapshots históricos y registro desde el dashboard en menos de 15 segundos.
+> Comenzar la Fase 3 con registro de peso y gráfico de evolución.
 
-No comenzar todavía por IA ni estadísticas. Las recetas son la funcionalidad que más mejora el uso diario con el menor aumento de complejidad.
+No comenzar todavía por IA. El peso es el siguiente dato base necesario antes de construir estadísticas y observaciones de hábitos.

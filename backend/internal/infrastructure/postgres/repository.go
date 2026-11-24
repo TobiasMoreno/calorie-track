@@ -98,16 +98,24 @@ func (r *Repository) GetTasks(ctx context.Context, date string) ([]domain.DailyM
 }
 
 func (r *Repository) GetEntries(ctx context.Context, date string) ([]domain.MealEntry, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id,local_date::text,task_id,meal_name_snapshot,total_calories,created_at FROM meal_entries WHERE local_date=$1::date ORDER BY created_at,id`, date)
+	rows, err := r.db.QueryContext(ctx, `SELECT id,local_date::text,task_id,meal_name_snapshot,recipe_id,recipe_name_snapshot,recipe_multiplier,total_calories,created_at FROM meal_entries WHERE local_date=$1::date ORDER BY created_at,id`, date)
 	if err != nil {
 		return nil, err
 	}
 	entries := []domain.MealEntry{}
 	for rows.Next() {
 		var entry domain.MealEntry
-		if err := rows.Scan(&entry.ID, &entry.Date, &entry.TaskID, &entry.MealName, &entry.TotalCalories, &entry.CreatedAt); err != nil {
+		var recipeID sql.NullInt64
+		var multiplier sql.NullFloat64
+		if err := rows.Scan(&entry.ID, &entry.Date, &entry.TaskID, &entry.MealName, &recipeID, &entry.RecipeNameSnapshot, &multiplier, &entry.TotalCalories, &entry.CreatedAt); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if recipeID.Valid {
+			entry.RecipeID = &recipeID.Int64
+		}
+		if multiplier.Valid {
+			entry.RecipeMultiplier = &multiplier.Float64
 		}
 		entries = append(entries, entry)
 	}
@@ -265,7 +273,7 @@ func (r *Repository) UpdateFood(ctx context.Context, id int64, input domain.Food
 }
 
 func (r *Repository) listPortions(ctx context.Context, foodID int64) ([]domain.FoodPortion, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id,food_id,name,unit,size,grams,is_default FROM food_portions WHERE food_id=$1 ORDER BY grams`, foodID)
+	rows, err := r.db.QueryContext(ctx, `SELECT id,food_id,name,unit,size,grams,is_default,is_custom FROM food_portions WHERE food_id=$1 ORDER BY is_default DESC,grams,name`, foodID)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +281,7 @@ func (r *Repository) listPortions(ctx context.Context, foodID int64) ([]domain.F
 	result := []domain.FoodPortion{}
 	for rows.Next() {
 		var portion domain.FoodPortion
-		if err := rows.Scan(&portion.ID, &portion.FoodID, &portion.Name, &portion.Unit, &portion.Size, &portion.Grams, &portion.IsDefault); err != nil {
+		if err := rows.Scan(&portion.ID, &portion.FoodID, &portion.Name, &portion.Unit, &portion.Size, &portion.Grams, &portion.IsDefault, &portion.IsCustom); err != nil {
 			return nil, err
 		}
 		result = append(result, portion)
@@ -283,8 +291,253 @@ func (r *Repository) listPortions(ctx context.Context, foodID int64) ([]domain.F
 
 func (r *Repository) GetPortion(ctx context.Context, id int64) (domain.FoodPortion, error) {
 	var portion domain.FoodPortion
-	err := r.db.QueryRowContext(ctx, `SELECT id,food_id,name,unit,size,grams,is_default FROM food_portions WHERE id=$1`, id).Scan(&portion.ID, &portion.FoodID, &portion.Name, &portion.Unit, &portion.Size, &portion.Grams, &portion.IsDefault)
+	err := r.db.QueryRowContext(ctx, `SELECT id,food_id,name,unit,size,grams,is_default,is_custom FROM food_portions WHERE id=$1`, id).Scan(&portion.ID, &portion.FoodID, &portion.Name, &portion.Unit, &portion.Size, &portion.Grams, &portion.IsDefault, &portion.IsCustom)
 	return portion, mapError(err)
+}
+
+func (r *Repository) CreatePortion(ctx context.Context, foodID int64, input domain.FoodPortionInput) (domain.FoodPortion, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.FoodPortion{}, err
+	}
+	defer tx.Rollback()
+	if input.IsDefault {
+		if _, err = tx.ExecContext(ctx, `UPDATE food_portions SET is_default=FALSE WHERE food_id=$1`, foodID); err != nil {
+			return domain.FoodPortion{}, err
+		}
+	}
+	var id int64
+	err = tx.QueryRowContext(ctx, `INSERT INTO food_portions(food_id,name,unit,size,grams,is_default,is_custom) VALUES ($1,$2,$3,$4,$5,$6,TRUE) RETURNING id`, foodID, input.Name, input.Unit, input.Size, input.Grams, input.IsDefault).Scan(&id)
+	if err != nil {
+		return domain.FoodPortion{}, mapError(err)
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.FoodPortion{}, err
+	}
+	return r.GetPortion(ctx, id)
+}
+
+func (r *Repository) UpdatePortion(ctx context.Context, id int64, input domain.FoodPortionInput) (domain.FoodPortion, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.FoodPortion{}, err
+	}
+	defer tx.Rollback()
+	var foodID int64
+	var wasDefault, isCustom bool
+	if err = tx.QueryRowContext(ctx, `SELECT food_id,is_default,is_custom FROM food_portions WHERE id=$1 FOR UPDATE`, id).Scan(&foodID, &wasDefault, &isCustom); err != nil {
+		return domain.FoodPortion{}, mapError(err)
+	}
+	if !isCustom {
+		return domain.FoodPortion{}, fmt.Errorf("%w: sólo se pueden editar porciones personales", domain.ErrValidation)
+	}
+	if input.IsDefault {
+		if _, err = tx.ExecContext(ctx, `UPDATE food_portions SET is_default=FALSE WHERE food_id=$1`, foodID); err != nil {
+			return domain.FoodPortion{}, err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE food_portions SET name=$1,unit=$2,size=$3,grams=$4,is_default=$5 WHERE id=$6`, input.Name, input.Unit, input.Size, input.Grams, input.IsDefault, id)
+	if err != nil {
+		return domain.FoodPortion{}, mapError(err)
+	}
+	if wasDefault && !input.IsDefault {
+		if _, err = tx.ExecContext(ctx, `UPDATE food_portions SET is_default=TRUE WHERE id=(SELECT id FROM food_portions WHERE food_id=$1 AND id<>$2 ORDER BY grams,id LIMIT 1)`, foodID, id); err != nil {
+			return domain.FoodPortion{}, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.FoodPortion{}, err
+	}
+	return r.GetPortion(ctx, id)
+}
+
+func (r *Repository) SetDefaultPortion(ctx context.Context, id int64) (domain.FoodPortion, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.FoodPortion{}, err
+	}
+	defer tx.Rollback()
+	var foodID int64
+	if err = tx.QueryRowContext(ctx, `SELECT food_id FROM food_portions WHERE id=$1 FOR UPDATE`, id).Scan(&foodID); err != nil {
+		return domain.FoodPortion{}, mapError(err)
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE food_portions SET is_default=(id=$1) WHERE food_id=$2`, id, foodID); err != nil {
+		return domain.FoodPortion{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.FoodPortion{}, err
+	}
+	return r.GetPortion(ctx, id)
+}
+
+func (r *Repository) DeletePortion(ctx context.Context, id int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var foodID int64
+	var isDefault, isCustom bool
+	if err = tx.QueryRowContext(ctx, `SELECT food_id,is_default,is_custom FROM food_portions WHERE id=$1 FOR UPDATE`, id).Scan(&foodID, &isDefault, &isCustom); err != nil {
+		return mapError(err)
+	}
+	if !isCustom {
+		return fmt.Errorf("%w: sólo se pueden eliminar porciones personales", domain.ErrValidation)
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM food_portions WHERE id=$1`, id); err != nil {
+		return err
+	}
+	if isDefault {
+		if _, err = tx.ExecContext(ctx, `UPDATE food_portions SET is_default=TRUE WHERE id=(SELECT id FROM food_portions WHERE food_id=$1 ORDER BY grams,id LIMIT 1)`, foodID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) ListRecipes(ctx context.Context, query string) ([]domain.Recipe, error) {
+	pattern := "%" + strings.ToLower(query) + "%"
+	rows, err := r.db.QueryContext(ctx, `SELECT id,name,servings,notes,created_at,updated_at FROM recipes WHERE lower(name) LIKE $1 ORDER BY updated_at DESC,name LIMIT 100`, pattern)
+	if err != nil {
+		return nil, err
+	}
+	recipes := []domain.Recipe{}
+	for rows.Next() {
+		var recipe domain.Recipe
+		if err := rows.Scan(&recipe.ID, &recipe.Name, &recipe.Servings, &recipe.Notes, &recipe.CreatedAt, &recipe.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		recipes = append(recipes, recipe)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	for index := range recipes {
+		ingredients, err := r.getRecipeIngredients(ctx, recipes[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		recipes[index].Ingredients = ingredients
+		completeRecipeTotals(&recipes[index])
+	}
+	return recipes, nil
+}
+
+func (r *Repository) GetRecipe(ctx context.Context, id int64) (domain.Recipe, error) {
+	var recipe domain.Recipe
+	err := r.db.QueryRowContext(ctx, `SELECT id,name,servings,notes,created_at,updated_at FROM recipes WHERE id=$1`, id).Scan(&recipe.ID, &recipe.Name, &recipe.Servings, &recipe.Notes, &recipe.CreatedAt, &recipe.UpdatedAt)
+	if err != nil {
+		return recipe, mapError(err)
+	}
+	recipe.Ingredients, err = r.getRecipeIngredients(ctx, id)
+	if err != nil {
+		return recipe, err
+	}
+	completeRecipeTotals(&recipe)
+	return recipe, nil
+}
+
+func (r *Repository) getRecipeIngredients(ctx context.Context, recipeID int64) ([]domain.RecipeIngredient, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT ri.id,ri.recipe_id,ri.food_id,f.name,ri.quantity,ri.unit,ri.portion_id,ri.portion_name_snapshot,ri.estimated_grams,f.calories_per_100g,ri.cooking_method,ri.notes FROM recipe_ingredients ri JOIN foods f ON f.id=ri.food_id WHERE ri.recipe_id=$1 ORDER BY ri.position,ri.id`, recipeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []domain.RecipeIngredient{}
+	for rows.Next() {
+		var ingredient domain.RecipeIngredient
+		var portionID sql.NullInt64
+		if err := rows.Scan(&ingredient.ID, &ingredient.RecipeID, &ingredient.FoodID, &ingredient.FoodName, &ingredient.Quantity, &ingredient.Unit, &portionID, &ingredient.PortionName, &ingredient.EstimatedGrams, &ingredient.CaloriesPer100G, &ingredient.CookingMethod, &ingredient.Notes); err != nil {
+			return nil, err
+		}
+		if portionID.Valid {
+			ingredient.PortionID = &portionID.Int64
+		}
+		ingredient.CalculatedCalories = domain.RoundCalories(ingredient.EstimatedGrams * ingredient.CaloriesPer100G / 100)
+		result = append(result, ingredient)
+	}
+	return result, rows.Err()
+}
+
+func completeRecipeTotals(recipe *domain.Recipe) {
+	total := 0.0
+	for _, ingredient := range recipe.Ingredients {
+		total += ingredient.CalculatedCalories
+	}
+	recipe.TotalCalories = domain.RoundCalories(total)
+	if recipe.Servings > 0 {
+		recipe.CaloriesPerServing = domain.RoundCalories(total / recipe.Servings)
+	}
+}
+
+func (r *Repository) CreateRecipe(ctx context.Context, input domain.RecipeInput, ingredients []domain.RecipeIngredient) (domain.Recipe, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Recipe{}, err
+	}
+	defer tx.Rollback()
+	var id int64
+	if err = tx.QueryRowContext(ctx, `INSERT INTO recipes(name,servings,notes) VALUES ($1,$2,$3) RETURNING id`, input.Name, input.Servings, input.Notes).Scan(&id); err != nil {
+		return domain.Recipe{}, mapError(err)
+	}
+	if err := insertRecipeIngredients(ctx, tx, id, ingredients); err != nil {
+		return domain.Recipe{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Recipe{}, err
+	}
+	return r.GetRecipe(ctx, id)
+}
+
+func (r *Repository) UpdateRecipe(ctx context.Context, id int64, input domain.RecipeInput, ingredients []domain.RecipeIngredient) (domain.Recipe, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Recipe{}, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE recipes SET name=$1,servings=$2,notes=$3,updated_at=CURRENT_TIMESTAMP WHERE id=$4`, input.Name, input.Servings, input.Notes, id)
+	if err != nil {
+		return domain.Recipe{}, mapError(err)
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return domain.Recipe{}, domain.ErrNotFound
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM recipe_ingredients WHERE recipe_id=$1`, id); err != nil {
+		return domain.Recipe{}, err
+	}
+	if err := insertRecipeIngredients(ctx, tx, id, ingredients); err != nil {
+		return domain.Recipe{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Recipe{}, err
+	}
+	return r.GetRecipe(ctx, id)
+}
+
+func insertRecipeIngredients(ctx context.Context, tx *sql.Tx, recipeID int64, ingredients []domain.RecipeIngredient) error {
+	for index, ingredient := range ingredients {
+		_, err := tx.ExecContext(ctx, `INSERT INTO recipe_ingredients(recipe_id,food_id,quantity,unit,estimated_grams,position,portion_id,portion_name_snapshot,cooking_method,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, recipeID, ingredient.FoodID, ingredient.Quantity, ingredient.Unit, ingredient.EstimatedGrams, index, ingredient.PortionID, ingredient.PortionName, ingredient.CookingMethod, ingredient.Notes)
+		if err != nil {
+			return mapError(err)
+		}
+	}
+	return nil
+}
+
+func (r *Repository) DeleteRecipe(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM recipes WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) CreateMealEntry(ctx context.Context, input domain.CreateMealEntryInput, items []domain.MealEntryItem) (domain.MealEntry, error) {
@@ -305,7 +558,7 @@ func (r *Repository) CreateMealEntry(ctx context.Context, input domain.CreateMea
 	}
 	total := domain.SumCalories(items)
 	var entryID int64
-	err = tx.QueryRowContext(ctx, `INSERT INTO meal_entries(local_date,task_id,meal_name_snapshot,total_calories) VALUES ($1::date,$2,$3,$4) RETURNING id`, input.Date, input.TaskID, taskName, total).Scan(&entryID)
+	err = tx.QueryRowContext(ctx, `INSERT INTO meal_entries(local_date,task_id,meal_name_snapshot,recipe_id,recipe_name_snapshot,recipe_multiplier,total_calories) VALUES ($1::date,$2,$3,$4,$5,$6,$7) RETURNING id`, input.Date, input.TaskID, taskName, input.RecipeID, input.RecipeName, input.RecipeMultiplier, total).Scan(&entryID)
 	if err != nil {
 		return domain.MealEntry{}, mapError(err)
 	}
@@ -321,7 +574,46 @@ func (r *Repository) CreateMealEntry(ctx context.Context, input domain.CreateMea
 	if err = tx.Commit(); err != nil {
 		return domain.MealEntry{}, err
 	}
-	return domain.MealEntry{ID: entryID, Date: input.Date, TaskID: input.TaskID, MealName: taskName, TotalCalories: total, Items: items, CreatedAt: time.Now()}, nil
+	return domain.MealEntry{ID: entryID, Date: input.Date, TaskID: input.TaskID, MealName: taskName, RecipeID: input.RecipeID, RecipeNameSnapshot: input.RecipeName, RecipeMultiplier: input.RecipeMultiplier, TotalCalories: total, Items: items, CreatedAt: time.Now()}, nil
+}
+
+func (r *Repository) UpdateMealEntry(ctx context.Context, id int64, items []domain.MealEntryItem) (domain.MealEntry, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.MealEntry{}, err
+	}
+	defer tx.Rollback()
+	var entry domain.MealEntry
+	var recipeID sql.NullInt64
+	var multiplier sql.NullFloat64
+	err = tx.QueryRowContext(ctx, `SELECT id,local_date::text,task_id,meal_name_snapshot,recipe_id,recipe_name_snapshot,recipe_multiplier,created_at FROM meal_entries WHERE id=$1 FOR UPDATE`, id).Scan(&entry.ID, &entry.Date, &entry.TaskID, &entry.MealName, &recipeID, &entry.RecipeNameSnapshot, &multiplier, &entry.CreatedAt)
+	if err != nil {
+		return domain.MealEntry{}, mapError(err)
+	}
+	if recipeID.Valid {
+		entry.RecipeID = &recipeID.Int64
+	}
+	if multiplier.Valid {
+		entry.RecipeMultiplier = &multiplier.Float64
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM meal_entry_items WHERE meal_entry_id=$1`, id); err != nil {
+		return domain.MealEntry{}, err
+	}
+	for index, item := range items {
+		_, err = tx.ExecContext(ctx, `INSERT INTO meal_entry_items(meal_entry_id,food_id,food_name_snapshot,quantity,unit,portion_id,portion_name_snapshot,estimated_grams,calories_per_100g_snapshot,calculated_calories,cooking_method,notes,position) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, id, item.FoodID, item.FoodNameSnapshot, item.Quantity, item.Unit, item.PortionID, item.PortionNameSnapshot, item.EstimatedGrams, item.CaloriesPer100GSnapshot, item.CalculatedCalories, item.CookingMethod, item.Notes, index)
+		if err != nil {
+			return domain.MealEntry{}, mapError(err)
+		}
+	}
+	entry.TotalCalories = domain.SumCalories(items)
+	if _, err = tx.ExecContext(ctx, `UPDATE meal_entries SET total_calories=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2`, entry.TotalCalories, id); err != nil {
+		return domain.MealEntry{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.MealEntry{}, err
+	}
+	entry.Items = items
+	return entry, nil
 }
 
 func (r *Repository) DeleteMealEntry(ctx context.Context, id int64) error {

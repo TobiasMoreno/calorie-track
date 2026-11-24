@@ -28,3 +28,15 @@ export function formatShortDay(date: string) {
     .replace('.', '')
 }
 
+export function addMonths(month: string, amount: number) {
+  const parsed = new Date(`${month}-15T12:00:00Z`)
+  parsed.setUTCMonth(parsed.getUTCMonth() + amount)
+  return parsed.toISOString().slice(0, 7)
+}
+
+export function formatMonth(month: string) {
+  const formatted = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${month}-15T12:00:00Z`))
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+}
+

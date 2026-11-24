@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Moon, Settings, Sun } from 'lucide-react'
+import { BookOpen, CalendarDays, Moon, Settings, Sun } from 'lucide-react'
 
-export function AppShell({ children, onOpenSettings, onGoToday }: { children: ReactNode; onOpenSettings: () => void; onGoToday: () => void }) {
+export function AppShell({ children, activeView, onOpenCalendar, onOpenRecipes, onOpenSettings, onGoToday }: { children: ReactNode; activeView: 'day' | 'calendar'; onOpenCalendar: () => void; onOpenRecipes: () => void; onOpenSettings: () => void; onGoToday: () => void }) {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('calorietrack-theme') === 'light' ? 'light' : 'dark'))
 
   useEffect(() => {
@@ -18,7 +18,9 @@ export function AppShell({ children, onOpenSettings, onGoToday }: { children: Re
             <span>CalorieTrack</span>
           </button>
           <nav aria-label="Navegación principal">
-            <button onClick={onGoToday}><span>Hoy</span></button>
+            <button className={activeView === 'day' ? 'active' : ''} onClick={onGoToday}><span>Hoy</span></button>
+            <button className={activeView === 'calendar' ? 'active' : ''} onClick={onOpenCalendar}><CalendarDays size={15} /> <span>Historial</span></button>
+            <button onClick={onOpenRecipes}><BookOpen size={15} /> <span>Recetas</span></button>
             <button onClick={onOpenSettings}><Settings size={15} /> <span>Configuración</span></button>
             <button className="icon-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema oscuro'}>
               {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}

@@ -28,9 +28,20 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 	mux.HandleFunc("GET /api/dashboard", h.dashboard)
+	mux.HandleFunc("GET /api/calendar", h.calendar)
 	mux.HandleFunc("GET /api/foods", h.listFoods)
 	mux.HandleFunc("PATCH /api/foods/{id}", h.updateFood)
+	mux.HandleFunc("POST /api/foods/{id}/portions", h.createPortion)
+	mux.HandleFunc("PUT /api/portions/{id}", h.updatePortion)
+	mux.HandleFunc("PATCH /api/portions/{id}/default", h.setDefaultPortion)
+	mux.HandleFunc("DELETE /api/portions/{id}", h.deletePortion)
+	mux.HandleFunc("GET /api/recipes", h.listRecipes)
+	mux.HandleFunc("POST /api/recipes", h.createRecipe)
+	mux.HandleFunc("PUT /api/recipes/{id}", h.updateRecipe)
+	mux.HandleFunc("DELETE /api/recipes/{id}", h.deleteRecipe)
+	mux.HandleFunc("POST /api/recipe-entries", h.createRecipeEntry)
 	mux.HandleFunc("POST /api/meal-entries", h.createMealEntry)
+	mux.HandleFunc("PUT /api/meal-entries/{id}", h.updateMealEntry)
 	mux.HandleFunc("DELETE /api/meal-entries/{id}", h.deleteMealEntry)
 	mux.HandleFunc("PATCH /api/tasks/{id}", h.updateTask)
 	mux.HandleFunc("POST /api/tasks", h.createTask)
@@ -74,6 +85,15 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.Calendar(r.Context(), r.URL.Query().Get("month"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) listFoods(w http.ResponseWriter, r *http.Request) {
 	foods, err := h.service.ListFoods(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
@@ -102,6 +122,140 @@ func (h *Handler) updateFood(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, food)
 }
 
+func (h *Handler) createPortion(w http.ResponseWriter, r *http.Request) {
+	foodID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var input domain.FoodPortionInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	portion, err := h.service.CreatePortion(r.Context(), foodID, input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, portion)
+}
+
+func (h *Handler) updatePortion(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var input domain.FoodPortionInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	portion, err := h.service.UpdatePortion(r.Context(), id, input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, portion)
+}
+
+func (h *Handler) setDefaultPortion(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	portion, err := h.service.SetDefaultPortion(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, portion)
+}
+
+func (h *Handler) deletePortion(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.service.DeletePortion(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) listRecipes(w http.ResponseWriter, r *http.Request) {
+	recipes, err := h.service.ListRecipes(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, recipes)
+}
+
+func (h *Handler) createRecipe(w http.ResponseWriter, r *http.Request) {
+	var input domain.RecipeInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	recipe, err := h.service.CreateRecipe(r.Context(), input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, recipe)
+}
+
+func (h *Handler) updateRecipe(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var input domain.RecipeInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	recipe, err := h.service.UpdateRecipe(r.Context(), id, input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, recipe)
+}
+
+func (h *Handler) deleteRecipe(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.service.DeleteRecipe(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) createRecipeEntry(w http.ResponseWriter, r *http.Request) {
+	var input domain.RecipeMealEntryInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	entry, err := h.service.CreateRecipeMealEntry(r.Context(), input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, entry)
+}
+
 func (h *Handler) createMealEntry(w http.ResponseWriter, r *http.Request) {
 	var input domain.CreateMealEntryInput
 	if err := decodeJSON(r, &input); err != nil {
@@ -114,6 +268,25 @@ func (h *Handler) createMealEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, entry)
+}
+
+func (h *Handler) updateMealEntry(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var input domain.UpdateMealEntryInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, err)
+		return
+	}
+	entry, err := h.service.UpdateMealEntry(r.Context(), id, input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
 }
 
 func (h *Handler) deleteMealEntry(w http.ResponseWriter, r *http.Request) {

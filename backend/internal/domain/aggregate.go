@@ -6,12 +6,19 @@ func AggregateDay(date string, target *float64, tasks []DailyMealTask, entries [
 		calories += entry.TotalCalories
 	}
 	pending := 0
+	registered := 0
+	skipped := 0
 	for _, task := range tasks {
-		if task.Status == TaskPending {
+		switch task.Status {
+		case TaskPending:
 			pending++
+		case TaskRegistered:
+			registered++
+		case TaskSkipped:
+			skipped++
 		}
 	}
-	return DaySummary{Date: date, Calories: round1(calories), Target: target, PendingTasks: pending, HasData: len(entries) > 0}
+	return DaySummary{Date: date, Calories: round1(calories), Target: target, TaskCount: len(tasks), RegisteredTasks: registered, SkippedTasks: skipped, PendingTasks: pending, HasData: len(entries) > 0}
 }
 
 func SumCaloriesFromEntries(entries []MealEntry) float64 {
