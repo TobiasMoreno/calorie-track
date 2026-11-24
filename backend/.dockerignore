@@ -1,0 +1,6 @@
+.env
+data/
+bin/
+coverage.out
+**/*_test.go
+
